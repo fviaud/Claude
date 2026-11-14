@@ -141,9 +141,12 @@ func (f *fakeStore) DeleteCategory(_ context.Context, id int64) error {
 	return nil
 }
 
+const testKey = "test-key"
+
 type apiClient struct {
 	t   *testing.T
 	srv *httptest.Server
+	key string // sent as X-API-Key when not empty
 }
 
 func newClient(t *testing.T, ping func(context.Context) error) *apiClient {
@@ -152,9 +155,13 @@ func newClient(t *testing.T, ping func(context.Context) error) *apiClient {
 		ping = func(context.Context) error { return nil }
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := httptest.NewServer(New(newFakeStore(), ping, logger))
+	h, err := New(newFakeStore(), ping, logger, []string{testKey, "second-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	return &apiClient{t: t, srv: srv}
+	return &apiClient{t: t, srv: srv, key: testKey}
 }
 
 // do sends a request and checks the status code. When out is non-nil the
@@ -164,6 +171,9 @@ func (c *apiClient) do(method, path, body string, wantStatus int, out any) {
 	req, err := http.NewRequest(method, c.srv.URL+path, strings.NewReader(body))
 	if err != nil {
 		c.t.Fatal(err)
+	}
+	if c.key != "" {
+		req.Header.Set("X-API-Key", c.key)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -288,4 +298,63 @@ func TestBadRequests(t *testing.T) {
 func itoa(n int64) string {
 	b, _ := json.Marshal(n)
 	return string(b)
+}
+
+func TestNewRequiresAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if _, err := New(newFakeStore(), nil, logger, nil); err == nil {
+		t.Fatal("New without keys: want error, got nil")
+	}
+}
+
+func TestAPIKey(t *testing.T) {
+	c := newClient(t, nil)
+
+	c.key = ""
+	c.do("GET", "/healthz", "", http.StatusOK, nil) // public
+	c.do("GET", "/items", "", http.StatusUnauthorized, nil)
+	c.do("POST", "/items", `{"reference":"A","name":"A"}`, http.StatusUnauthorized, nil)
+	c.do("GET", "/does-not-exist", "", http.StatusUnauthorized, nil)
+
+	c.key = "wrong"
+	c.do("GET", "/items", "", http.StatusUnauthorized, nil)
+
+	c.key = "second-key" // every configured key is accepted
+	c.do("GET", "/items", "", http.StatusOK, nil)
+	c.do("GET", "/does-not-exist", "", http.StatusNotFound, nil)
+
+	for _, tt := range []struct {
+		header string
+		want   int
+	}{
+		{"Bearer " + testKey, http.StatusOK},
+		{"bearer " + testKey, http.StatusOK},
+		{"Bearer wrong", http.StatusUnauthorized},
+		{"Basic " + testKey, http.StatusUnauthorized},
+		{testKey, http.StatusUnauthorized},
+	} {
+		req, _ := http.NewRequest("GET", c.srv.URL+"/items", nil)
+		req.Header.Set("Authorization", tt.header)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != tt.want {
+			t.Errorf("Authorization %q: status = %d, want %d", tt.header, resp.StatusCode, tt.want)
+		}
+		if tt.want == http.StatusUnauthorized && resp.Header.Get("WWW-Authenticate") == "" {
+			t.Errorf("Authorization %q: missing WWW-Authenticate header", tt.header)
+		}
+	}
+}
+
+func TestParseAPIKeys(t *testing.T) {
+	got := ParseAPIKeys(" a, ,b ,, c")
+	if strings.Join(got, "|") != "a|b|c" {
+		t.Fatalf("ParseAPIKeys = %q", got)
+	}
+	if got := ParseAPIKeys("  "); len(got) != 0 {
+		t.Fatalf("ParseAPIKeys(blank) = %q, want empty", got)
+	}
 }

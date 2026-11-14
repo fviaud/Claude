@@ -15,5 +15,18 @@ services:
       timeout: 3s
       retries: 15
 
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://claude:claude@postgres:5432/claude?sslmode=disable
+      # Required: set API_KEYS in .env or your shell, or the API refuses to start.
+      API_KEYS: ${API_KEYS:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["app"]
+
 volumes:
   pgdata:

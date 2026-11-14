@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -32,27 +33,37 @@ type Server struct {
 	store  Store
 	ping   func(context.Context) error
 	logger *slog.Logger
+	keys   apiKeys
 	mux    *http.ServeMux
 }
 
-// New returns a Server. ping checks the database for /healthz.
-func New(store Store, ping func(context.Context) error, logger *slog.Logger) *Server {
-	s := &Server{store: store, ping: ping, logger: logger, mux: http.NewServeMux()}
+// New returns a Server. ping checks the database for /healthz, which stays
+// public; every other route requires one of apiKeys. It returns an error if
+// apiKeys is empty, so the API is never exposed without protection by mistake.
+func New(store Store, ping func(context.Context) error, logger *slog.Logger, apiKeys []string) (*Server, error) {
+	if len(apiKeys) == 0 {
+		return nil, fmt.Errorf("httpapi: at least one API key is required")
+	}
+	s := &Server{store: store, ping: ping, logger: logger, keys: newAPIKeys(apiKeys), mux: http.NewServeMux()}
 
 	s.mux.HandleFunc("GET /healthz", s.health)
 
-	s.mux.HandleFunc("GET /items", s.listItems)
-	s.mux.HandleFunc("POST /items", s.createItem)
-	s.mux.HandleFunc("GET /items/{id}", s.getItem)
-	s.mux.HandleFunc("PUT /items/{id}", s.updateItem)
-	s.mux.HandleFunc("DELETE /items/{id}", s.deleteItem)
-	s.mux.HandleFunc("POST /items/{id}/stock", s.adjustStock)
+	protected := http.NewServeMux()
+	protected.HandleFunc("GET /items", s.listItems)
+	protected.HandleFunc("POST /items", s.createItem)
+	protected.HandleFunc("GET /items/{id}", s.getItem)
+	protected.HandleFunc("PUT /items/{id}", s.updateItem)
+	protected.HandleFunc("DELETE /items/{id}", s.deleteItem)
+	protected.HandleFunc("POST /items/{id}/stock", s.adjustStock)
+	protected.HandleFunc("GET /categories", s.listCategories)
+	protected.HandleFunc("POST /categories", s.createCategory)
+	protected.HandleFunc("DELETE /categories/{id}", s.deleteCategory)
 
-	s.mux.HandleFunc("GET /categories", s.listCategories)
-	s.mux.HandleFunc("POST /categories", s.createCategory)
-	s.mux.HandleFunc("DELETE /categories/{id}", s.deleteCategory)
+	// Every path other than /healthz goes through the key check first, so an
+	// unauthenticated client cannot even probe which routes exist.
+	s.mux.Handle("/", s.requireAPIKey(protected))
 
-	return s
+	return s, nil
 }
 
 // ServeHTTP logs each request and dispatches it.
