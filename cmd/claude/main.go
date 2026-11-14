@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/fviaud/claude/internal/catalogue"
 	"github.com/fviaud/claude/internal/database"
 	"github.com/fviaud/claude/internal/greeting"
 )
@@ -40,6 +41,20 @@ func run(ctx context.Context, name string) error {
 		return err
 	}
 	fmt.Println("Connected to", version)
+
+	applied, err := database.Migrate(ctx, pool)
+	if err != nil {
+		return err
+	}
+	for _, m := range applied {
+		fmt.Println("Applied migration", m)
+	}
+
+	count, err := catalogue.NewRepository(pool).Count(ctx)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Catalogue: %d item(s)\n", count)
 
 	return nil
 }

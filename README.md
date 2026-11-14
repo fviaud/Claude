@@ -8,7 +8,9 @@ Projet Go.
 .
 ├── cmd/claude/        # point d'entrée de l'application (package main)
 ├── internal/
-│   ├── database/      # pool de connexions PostgreSQL (pgx)
+│   ├── catalogue/     # table catalogue : création, lecture, mise à jour, suppression
+│   ├── database/      # pool de connexions PostgreSQL (pgx) et migrations
+│   │   └── migrations/  # fichiers SQL appliqués au démarrage
 │   └── greeting/      # code d'exemple
 ├── docker-compose.yml # PostgreSQL 16 pour le développement local
 ├── .env.example       # variables d'environnement à copier dans .env
@@ -28,6 +30,26 @@ make run               # Hello, world! / Connected to PostgreSQL 16...
 make db-down           # arrête PostgreSQL
 ```
 
+### Migrations
+
+Au démarrage, l'application applique les fichiers de
+`internal/database/migrations/` qui ne l'ont pas encore été, dans l'ordre de
+leur nom, et les enregistre dans la table `schema_migrations`. Pour faire
+évoluer le schéma, ajouter un fichier numéroté (`0002_....sql`) ; ne jamais
+modifier un fichier déjà appliqué.
+
+### Table `catalogue`
+
+| Colonne       | Type          | Remarque                         |
+|---------------|---------------|----------------------------------|
+| `id`          | `BIGINT`      | clé primaire auto-incrémentée    |
+| `reference`   | `TEXT`        | obligatoire, unique              |
+| `name`        | `TEXT`        | obligatoire, indexé              |
+| `description` | `TEXT`        | vide par défaut                  |
+| `price_cents` | `BIGINT`      | prix en centimes, ≥ 0            |
+| `created_at`  | `TIMESTAMPTZ` | date de création                 |
+| `updated_at`  | `TIMESTAMPTZ` | date de dernière modification    |
+
 ## Commandes
 
 ```sh
@@ -46,4 +68,6 @@ DATABASE_URL=postgres://claude:claude@localhost:5432/claude?sslmode=disable \
   go run ./cmd/claude -name Fred
 # Hello, Fred!
 # Connected to PostgreSQL 16...
+# Applied migration 0001_create_catalogue
+# Catalogue: 0 item(s)
 ```
