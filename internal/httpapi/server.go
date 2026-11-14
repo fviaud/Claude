@@ -1,0 +1,132 @@
+// Package httpapi exposes the catalogue over a JSON HTTP API.
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/fviaud/claude/internal/catalogue"
+)
+
+// Store is the subset of catalogue.Repository the API needs. It lets tests
+// use an in-memory fake.
+type Store interface {
+	Create(ctx context.Context, it catalogue.Item) (catalogue.Item, error)
+	Get(ctx context.Context, id int64) (catalogue.Item, error)
+	List(ctx context.Context, limit, offset int) ([]catalogue.Item, error)
+	ListByCategory(ctx context.Context, categoryID int64, limit, offset int) ([]catalogue.Item, error)
+	Update(ctx context.Context, it catalogue.Item) (catalogue.Item, error)
+	Delete(ctx context.Context, id int64) error
+	AdjustStock(ctx context.Context, id int64, delta int32) (int32, error)
+	CreateCategory(ctx context.Context, name string) (catalogue.Category, error)
+	ListCategories(ctx context.Context) ([]catalogue.Category, error)
+	DeleteCategory(ctx context.Context, id int64) error
+}
+
+// Server handles the HTTP requests.
+type Server struct {
+	store  Store
+	ping   func(context.Context) error
+	logger *slog.Logger
+	mux    *http.ServeMux
+}
+
+// New returns a Server. ping checks the database for /healthz.
+func New(store Store, ping func(context.Context) error, logger *slog.Logger) *Server {
+	s := &Server{store: store, ping: ping, logger: logger, mux: http.NewServeMux()}
+
+	s.mux.HandleFunc("GET /healthz", s.health)
+
+	s.mux.HandleFunc("GET /items", s.listItems)
+	s.mux.HandleFunc("POST /items", s.createItem)
+	s.mux.HandleFunc("GET /items/{id}", s.getItem)
+	s.mux.HandleFunc("PUT /items/{id}", s.updateItem)
+	s.mux.HandleFunc("DELETE /items/{id}", s.deleteItem)
+	s.mux.HandleFunc("POST /items/{id}/stock", s.adjustStock)
+
+	s.mux.HandleFunc("GET /categories", s.listCategories)
+	s.mux.HandleFunc("POST /categories", s.createCategory)
+	s.mux.HandleFunc("DELETE /categories/{id}", s.deleteCategory)
+
+	return s
+}
+
+// ServeHTTP logs each request and dispatches it.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	s.mux.ServeHTTP(rec, r)
+	s.logger.Info("request",
+		"method", r.Method, "path", r.URL.Path,
+		"status", rec.status, "duration", time.Since(start))
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	if err := s.ping(r.Context()); err != nil {
+		s.logger.Error("health check failed", "err", err)
+		writeError(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// writeJSON writes v as JSON with the given status code.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, errorResponse{Error: msg})
+}
+
+// storeError converts a catalogue error to an HTTP response. Unknown errors
+// are logged and reported as 500 without leaking details.
+func (s *Server) storeError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, catalogue.ErrNotFound):
+		writeError(w, http.StatusNotFound, "item not found")
+	case errors.Is(err, catalogue.ErrDuplicateReference):
+		writeError(w, http.StatusConflict, "reference already exists")
+	case errors.Is(err, catalogue.ErrDuplicateCategory):
+		writeError(w, http.StatusConflict, "category already exists")
+	case errors.Is(err, catalogue.ErrInsufficientStock):
+		writeError(w, http.StatusConflict, "insufficient stock")
+	case errors.Is(err, catalogue.ErrCategoryNotFound):
+		writeError(w, http.StatusNotFound, "category not found")
+	default:
+		s.logger.Error("store error", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+	}
+}
+
+// decode reads a JSON body into v, rejecting unknown fields and bodies
+// larger than 1 MiB.
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return false
+	}
+	return true
+}
