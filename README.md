@@ -9,6 +9,7 @@ stocké dans PostgreSQL.
 .
 ├── cmd/claude/        # point d'entrée : connexion, migrations, serveur HTTP
 ├── .github/workflows/ # CI GitHub Actions
+├── docs/schema.md     # schéma détaillé de la base de données
 ├── internal/
 │   ├── catalogue/     # accès aux tables catalogue et categories
 │   ├── database/      # pool de connexions PostgreSQL (pgx) et migrations
@@ -49,6 +50,9 @@ Au démarrage, l'application applique les fichiers de
 leur nom, et les enregistre dans la table `schema_migrations`. Pour faire
 évoluer le schéma, ajouter un fichier numéroté (`0002_....sql`) ; ne jamais
 modifier un fichier déjà appliqué.
+
+Le schéma détaillé, avec diagramme et règles métier, est dans
+[`docs/schema.md`](docs/schema.md).
 
 ### Table `catalogue`
 
