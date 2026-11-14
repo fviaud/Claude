@@ -47,8 +47,21 @@ modifier un fichier déjà appliqué.
 | `name`        | `TEXT`        | obligatoire, indexé              |
 | `description` | `TEXT`        | vide par défaut                  |
 | `price_cents` | `BIGINT`      | prix en centimes, ≥ 0            |
+| `category_id` | `BIGINT`      | catégorie (facultative), → `categories.id` |
+| `stock`       | `INTEGER`     | quantité disponible, ≥ 0, 0 par défaut |
 | `created_at`  | `TIMESTAMPTZ` | date de création                 |
 | `updated_at`  | `TIMESTAMPTZ` | date de dernière modification    |
+
+### Table `categories`
+
+| Colonne      | Type          | Remarque                      |
+|--------------|---------------|-------------------------------|
+| `id`         | `BIGINT`      | clé primaire auto-incrémentée |
+| `name`       | `TEXT`        | obligatoire, unique           |
+| `created_at` | `TIMESTAMPTZ` | date de création              |
+
+Supprimer une catégorie conserve ses articles, qui n'ont alors plus de catégorie.
+Le stock se modifie avec `AdjustStock`, qui refuse de le rendre négatif.
 
 ## Commandes
 

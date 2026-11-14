@@ -27,7 +27,7 @@ func newRepo(t *testing.T) *catalogue.Repository {
 	if _, err := database.Migrate(ctx, pool); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE catalogue RESTART IDENTITY"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE catalogue, categories RESTART IDENTITY"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	return catalogue.NewRepository(pool)
@@ -101,5 +101,82 @@ func TestRepositoryRejectsNegativePrice(t *testing.T) {
 	_, err := repo.Create(context.Background(), catalogue.Item{Reference: "NEG", Name: "X", PriceCents: -1})
 	if err == nil {
 		t.Fatal("Create with negative price: want error, got nil")
+	}
+}
+
+func TestRepositoryCategories(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+
+	meubles, err := repo.CreateCategory(ctx, "Meubles")
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	if _, err := repo.CreateCategory(ctx, "Meubles"); !errors.Is(err, catalogue.ErrDuplicateCategory) {
+		t.Fatalf("CreateCategory duplicate: error = %v, want ErrDuplicateCategory", err)
+	}
+	if _, err := repo.CreateCategory(ctx, "Déco"); err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	cats, err := repo.ListCategories(ctx)
+	if err != nil || len(cats) != 2 || cats[0].Name != "Déco" {
+		t.Fatalf("ListCategories = %+v, %v", cats, err)
+	}
+
+	chaise, err := repo.Create(ctx, catalogue.Item{Reference: "C1", Name: "Chaise", CategoryID: &meubles.ID})
+	if err != nil {
+		t.Fatalf("Create with category: %v", err)
+	}
+	if _, err := repo.Create(ctx, catalogue.Item{Reference: "L1", Name: "Lampe"}); err != nil {
+		t.Fatalf("Create without category: %v", err)
+	}
+	missing := int64(9999)
+	if _, err := repo.Create(ctx, catalogue.Item{Reference: "X1", Name: "X", CategoryID: &missing}); !errors.Is(err, catalogue.ErrCategoryNotFound) {
+		t.Fatalf("Create with missing category: error = %v, want ErrCategoryNotFound", err)
+	}
+
+	items, err := repo.ListByCategory(ctx, meubles.ID, 10, 0)
+	if err != nil || len(items) != 1 || items[0].ID != chaise.ID {
+		t.Fatalf("ListByCategory = %+v, %v", items, err)
+	}
+
+	if err := repo.DeleteCategory(ctx, meubles.ID); err != nil {
+		t.Fatalf("DeleteCategory: %v", err)
+	}
+	got, err := repo.Get(ctx, chaise.ID)
+	if err != nil || got.CategoryID != nil {
+		t.Fatalf("Get after DeleteCategory = %+v, %v; want CategoryID nil", got, err)
+	}
+	if err := repo.DeleteCategory(ctx, meubles.ID); !errors.Is(err, catalogue.ErrCategoryNotFound) {
+		t.Fatalf("DeleteCategory twice: error = %v, want ErrCategoryNotFound", err)
+	}
+}
+
+func TestRepositoryStock(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+
+	it, err := repo.Create(ctx, catalogue.Item{Reference: "S1", Name: "Tabouret", Stock: 5})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if it.Stock != 5 {
+		t.Fatalf("Create: Stock = %d, want 5", it.Stock)
+	}
+
+	if s, err := repo.AdjustStock(ctx, it.ID, 3); err != nil || s != 8 {
+		t.Fatalf("AdjustStock(+3) = %d, %v; want 8", s, err)
+	}
+	if s, err := repo.AdjustStock(ctx, it.ID, -8); err != nil || s != 0 {
+		t.Fatalf("AdjustStock(-8) = %d, %v; want 0", s, err)
+	}
+	if _, err := repo.AdjustStock(ctx, it.ID, -1); !errors.Is(err, catalogue.ErrInsufficientStock) {
+		t.Fatalf("AdjustStock(-1) at 0: error = %v, want ErrInsufficientStock", err)
+	}
+	if _, err := repo.AdjustStock(ctx, 9999, 1); !errors.Is(err, catalogue.ErrNotFound) {
+		t.Fatalf("AdjustStock missing item: error = %v, want ErrNotFound", err)
+	}
+	if _, err := repo.Create(ctx, catalogue.Item{Reference: "S2", Name: "X", Stock: -1}); !errors.Is(err, catalogue.ErrInsufficientStock) {
+		t.Fatalf("Create with negative stock: error = %v, want ErrInsufficientStock", err)
 	}
 }
