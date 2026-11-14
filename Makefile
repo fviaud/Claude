@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration fmt vet clean db-up db-down docker-build up down
+.PHONY: build run test test-integration fmt vet clean db-up db-down docker-build up down smoke-test
 
 BINARY := bin/claude
 
@@ -35,6 +35,10 @@ db-down:
 
 docker-build:
 	docker build -t claude:latest .
+
+# Builds the image and checks it in real containers (PostgreSQL + API).
+smoke-test:
+	scripts/smoke-test.sh
 
 # Starts PostgreSQL and the API in containers (needs API_KEYS, e.g. from .env).
 up:

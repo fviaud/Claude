@@ -8,6 +8,7 @@ stocké dans PostgreSQL.
 ```
 .
 ├── cmd/claude/        # point d'entrée : connexion, migrations, serveur HTTP
+├── .github/workflows/ # CI GitHub Actions
 ├── internal/
 │   ├── catalogue/     # accès aux tables catalogue et categories
 │   ├── database/      # pool de connexions PostgreSQL (pgx) et migrations
@@ -15,6 +16,7 @@ stocké dans PostgreSQL.
 │   └── httpapi/       # routes et handlers JSON
 ├── Dockerfile         # image de production (binaire statique, distroless)
 ├── docker-compose.yml # PostgreSQL 16, et l'API avec le profil "app"
+├── scripts/smoke-test.sh # test de l'image Docker en conditions réelles
 ├── .env.example       # variables d'environnement à copier dans .env
 ├── go.mod
 └── Makefile
@@ -160,6 +162,20 @@ docker run -p 8080:8080 \
   claude:latest
 ```
 
+## Tests
+
+- `make test` : tests unitaires, sans base de données.
+- `make test-integration` : tests unitaires et d'intégration contre la base de
+  `DATABASE_URL`.
+- `make smoke-test` : construit l'image Docker, la lance avec un PostgreSQL en
+  conteneur et vérifie le comportement réel par HTTP (authentification,
+  création, stock, healthcheck, utilisateur non-root, arrêt propre), puis
+  supprime les conteneurs. `SKIP_BUILD=1` réutilise une image existante.
+
+La CI GitHub Actions (`.github/workflows/ci.yml`) s'exécute à chaque push et
+pull request : formatage, `go vet`, tous les tests avec un PostgreSQL de
+service (avec le détecteur de concurrence `-race`), puis le smoke test Docker.
+
 ## Commandes
 
 ```sh
@@ -171,5 +187,6 @@ make fmt               # formate le code
 make vet               # analyse statique
 make db-up / db-down   # démarre / arrête PostgreSQL avec Docker
 make docker-build      # construit l'image Docker
+make smoke-test        # teste l'image dans de vrais conteneurs
 make up / down         # démarre / arrête PostgreSQL + l'API en conteneurs
 ```
