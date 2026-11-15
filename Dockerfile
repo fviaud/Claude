@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/claude 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/claude /claude
 
-ENV ADDR=:8080
+ENV PORT=8080
 EXPOSE 8080
 USER nonroot:nonroot
 

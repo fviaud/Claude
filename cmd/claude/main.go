@@ -100,10 +100,14 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	return nil
 }
 
-// listenAddr returns the ADDR environment variable, or ":8080".
+// listenAddr returns the address to listen on: ADDR if set, else ":$PORT"
+// (the convention of hosting platforms such as Render), else ":8080".
 func listenAddr() string {
 	if addr := os.Getenv("ADDR"); addr != "" {
 		return addr
+	}
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
 	}
 	return ":8080"
 }

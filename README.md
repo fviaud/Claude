@@ -19,6 +19,7 @@ stocké dans PostgreSQL.
 │   └── httpapi/       # routes et handlers JSON
 ├── Dockerfile         # image de production (binaire statique, distroless)
 ├── docker-compose.yml # PostgreSQL 16, et l'API avec le profil "app"
+├── render.yaml        # déploiement sur Render (Blueprint)
 ├── scripts/smoke-test.sh # test de l'image Docker en conditions réelles
 ├── .env.example       # variables d'environnement à copier dans .env
 ├── go.mod
@@ -31,6 +32,7 @@ stocké dans PostgreSQL.
 |----------------|---------|----------------------------------------|
 | `DATABASE_URL` | —       | connexion PostgreSQL (obligatoire)     |
 | `ADDR`         | `:8080` | adresse d'écoute de l'API              |
+| `PORT`         | —       | port d'écoute si `ADDR` est vide (fourni par Render) |
 | `API_KEYS`     | —       | clés d'API acceptées, séparées par des virgules (obligatoire) |
 
 ## Base de données
@@ -182,6 +184,18 @@ docker run -p 8080:8080 \
   -e API_KEYS='une-clé-secrète' \
   claude:latest
 ```
+
+## Déploiement sur Render
+
+`render.yaml` décrit un service web Docker (`catalogue-api`, formule gratuite)
+relié à la base PostgreSQL Render `demo-test` :
+
+- `DATABASE_URL` est fourni par Render à partir de la base, sans mot de passe
+  dans le dépôt ;
+- `API_KEYS` est généré aléatoirement par Render : le lire dans le tableau de
+  bord (service → *Environment*) ;
+- chaque push sur la branche déclarée redéploie le service ; les migrations
+  s'appliquent au démarrage.
 
 ## Tests
 
