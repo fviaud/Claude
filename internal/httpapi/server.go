@@ -49,21 +49,36 @@ func New(store Store, ping func(context.Context) error, logger *slog.Logger, api
 	s.mux.HandleFunc("GET /healthz", s.health)
 
 	protected := http.NewServeMux()
-	protected.HandleFunc("GET /items", s.listItems)
-	protected.HandleFunc("POST /items", s.createItem)
-	protected.HandleFunc("GET /items/{id}", s.getItem)
-	protected.HandleFunc("PUT /items/{id}", s.updateItem)
-	protected.HandleFunc("DELETE /items/{id}", s.deleteItem)
-	protected.HandleFunc("POST /items/{id}/stock", s.adjustStock)
-	protected.HandleFunc("GET /categories", s.listCategories)
-	protected.HandleFunc("POST /categories", s.createCategory)
-	protected.HandleFunc("DELETE /categories/{id}", s.deleteCategory)
+	for _, rt := range s.protectedRoutes() {
+		protected.HandleFunc(rt.pattern, rt.handler)
+	}
 
 	// Every path other than /healthz goes through the key check first, so an
 	// unauthenticated client cannot even probe which routes exist.
 	s.mux.Handle("/", s.requireAPIKey(protected))
 
 	return s, nil
+}
+
+type route struct {
+	pattern string
+	handler http.HandlerFunc
+}
+
+// protectedRoutes lists the routes that require an API key. Keep
+// docs/openapi.yaml in sync: TestOpenAPIRoutesMatch fails otherwise.
+func (s *Server) protectedRoutes() []route {
+	return []route{
+		{"GET /items", s.listItems},
+		{"POST /items", s.createItem},
+		{"GET /items/{id}", s.getItem},
+		{"PUT /items/{id}", s.updateItem},
+		{"DELETE /items/{id}", s.deleteItem},
+		{"POST /items/{id}/stock", s.adjustStock},
+		{"GET /categories", s.listCategories},
+		{"POST /categories", s.createCategory},
+		{"DELETE /categories/{id}", s.deleteCategory},
+	}
 }
 
 // ServeHTTP logs each request and dispatches it.

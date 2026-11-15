@@ -17,9 +17,10 @@ import (
 
 // fakeStore is an in-memory Store that mimics the repository's errors.
 type fakeStore struct {
-	items  map[int64]catalogue.Item
-	cats   map[int64]catalogue.Category
-	nextID int64
+	items      map[int64]catalogue.Item
+	cats       map[int64]catalogue.Category
+	nextItemID int64 // separate sequences, as in PostgreSQL
+	nextCatID  int64
 }
 
 func newFakeStore() *fakeStore {
@@ -44,8 +45,8 @@ func (f *fakeStore) Create(_ context.Context, it catalogue.Item) (catalogue.Item
 	if err := f.check(it); err != nil {
 		return catalogue.Item{}, err
 	}
-	f.nextID++
-	it.ID = f.nextID
+	f.nextItemID++
+	it.ID = f.nextItemID
 	f.items[it.ID] = it
 	return it, nil
 }
@@ -118,8 +119,8 @@ func (f *fakeStore) CreateCategory(_ context.Context, name string) (catalogue.Ca
 			return catalogue.Category{}, catalogue.ErrDuplicateCategory
 		}
 	}
-	f.nextID++
-	c := catalogue.Category{ID: f.nextID, Name: name}
+	f.nextCatID++
+	c := catalogue.Category{ID: f.nextCatID, Name: name}
 	f.cats[c.ID] = c
 	return c, nil
 }

@@ -9,7 +9,9 @@ stocké dans PostgreSQL.
 .
 ├── cmd/claude/        # point d'entrée : connexion, migrations, serveur HTTP
 ├── .github/workflows/ # CI GitHub Actions
-├── docs/schema.md     # schéma détaillé de la base de données
+├── docs/
+│   ├── openapi.yaml   # spécification OpenAPI 3 de l'API
+│   └── schema.md      # schéma détaillé de la base de données
 ├── internal/
 │   ├── catalogue/     # accès aux tables catalogue et categories
 │   ├── database/      # pool de connexions PostgreSQL (pgx) et migrations
@@ -83,6 +85,20 @@ Le stock se modifie avec `AdjustStock`, qui refuse de le rendre négatif.
 
 Toutes les requêtes et réponses sont en JSON. Les erreurs ont la forme
 `{"error": "message"}`.
+
+La spécification complète est dans [`docs/openapi.yaml`](docs/openapi.yaml)
+(OpenAPI 3.0). Pour l'explorer :
+
+- **Swagger UI** :
+  `docker run -p 8081:8080 -e SWAGGER_JSON=/spec/openapi.yaml -v "$PWD/docs:/spec" swaggerapi/swagger-ui`
+  puis ouvrir http://localhost:8081 ; le bouton *Authorize* permet de saisir la clé d'API.
+- **Postman** ou **Insomnia** : *Import* → choisir le fichier `docs/openapi.yaml`.
+- **En ligne** : coller le fichier dans https://editor.swagger.io.
+
+Les tests vérifient que la spécification reste fidèle au code : chaque route
+du serveur doit y figurer (et inversement), et chaque réponse réelle, y
+compris d'erreur, doit respecter le format décrit. Modifier une route sans
+mettre à jour `docs/openapi.yaml` fait échouer `make test`.
 
 ### Authentification
 
