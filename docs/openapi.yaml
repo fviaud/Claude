@@ -4,7 +4,7 @@ info:
   title: Catalogue API
   version: 1.0.0
   description: |
-    API JSON de gestion d'un catalogue d'articles : catégories, prix et stock.
+    API JSON de gestion d'un catalogue de produits : catégories, prix et stock.
 
     **Authentification** : toutes les routes sauf `/healthz` exigent une clé
     d'API, envoyée dans l'en-tête `X-API-Key` ou en `Authorization: Bearer`.
@@ -25,10 +25,10 @@ security:
 tags:
   - name: Santé
     description: État du service
-  - name: Articles
-    description: Articles du catalogue et leur stock
+  - name: Produits
+    description: Produits du catalogue et leur stock
   - name: Catégories
-    description: Catégories d'articles
+    description: Catégories de produits
 
 paths:
   /healthz:
@@ -54,41 +54,41 @@ paths:
               example:
                 error: database unavailable
 
-  /items:
+  /products:
     get:
-      tags: [Articles]
-      operationId: listItems
-      summary: Lister les articles
-      description: Articles triés par nom, avec pagination et filtre facultatif par catégorie.
+      tags: [Produits]
+      operationId: listProducts
+      summary: Lister les produits
+      description: Produits triés par nom, avec pagination et filtre facultatif par catégorie.
       parameters:
         - name: limit
           in: query
-          description: Nombre maximum d'articles renvoyés. Ramené entre 1 et 200.
+          description: Nombre maximum de produits renvoyés. Ramené entre 1 et 200.
           schema:
             type: integer
             minimum: 0
             default: 50
         - name: offset
           in: query
-          description: Nombre d'articles à sauter.
+          description: Nombre de produits à sauter.
           schema:
             type: integer
             minimum: 0
             default: 0
         - name: category_id
           in: query
-          description: Ne renvoyer que les articles de cette catégorie.
+          description: Ne renvoyer que les produits de cette catégorie.
           schema:
             type: integer
             format: int64
             minimum: 1
       responses:
         "200":
-          description: Page d'articles
+          description: Page de produits
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ItemList"
+                $ref: "#/components/schemas/ProductList"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -96,15 +96,15 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
     post:
-      tags: [Articles]
-      operationId: createItem
-      summary: Créer un article
+      tags: [Produits]
+      operationId: createProduct
+      summary: Créer un produit
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ItemInput"
+              $ref: "#/components/schemas/ProductInput"
             example:
               reference: C1
               name: Chaise
@@ -114,16 +114,16 @@ paths:
               stock: 5
       responses:
         "201":
-          description: Article créé
+          description: Produit créé
           headers:
             Location:
-              description: Chemin du nouvel article, par exemple `/items/1`
+              description: Chemin du nouveau produit, par exemple `/products/1`
               schema:
                 type: string
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Item"
+                $ref: "#/components/schemas/Product"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -137,36 +137,36 @@ paths:
               example:
                 error: reference already exists
         "422":
-          $ref: "#/components/responses/InvalidItem"
+          $ref: "#/components/responses/InvalidProduct"
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /items/{id}:
+  /products/{id}:
     parameters:
-      - $ref: "#/components/parameters/ItemId"
+      - $ref: "#/components/parameters/ProductId"
     get:
-      tags: [Articles]
-      operationId: getItem
-      summary: Lire un article
+      tags: [Produits]
+      operationId: getProduct
+      summary: Lire un produit
       responses:
         "200":
-          description: L'article
+          description: Le produit
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Item"
+                $ref: "#/components/schemas/Product"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          $ref: "#/components/responses/ItemNotFound"
+          $ref: "#/components/responses/ProductNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
     put:
-      tags: [Articles]
-      operationId: updateItem
-      summary: Remplacer un article
+      tags: [Produits]
+      operationId: updateProduct
+      summary: Remplacer un produit
       description: |
         Remplace tous les champs modifiables. Un champ absent prend sa valeur
         par défaut : par exemple, omettre `category_id` retire la catégorie.
@@ -175,22 +175,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ItemInput"
+              $ref: "#/components/schemas/ProductInput"
       responses:
         "200":
-          description: Article mis à jour
+          description: Produit mis à jour
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Item"
+                $ref: "#/components/schemas/Product"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          $ref: "#/components/responses/ItemNotFound"
+          $ref: "#/components/responses/ProductNotFound"
         "409":
-          description: Référence déjà utilisée par un autre article
+          description: Référence déjà utilisée par un autre produit
           content:
             application/json:
               schema:
@@ -198,31 +198,31 @@ paths:
               example:
                 error: reference already exists
         "422":
-          $ref: "#/components/responses/InvalidItem"
+          $ref: "#/components/responses/InvalidProduct"
         "500":
           $ref: "#/components/responses/InternalError"
     delete:
-      tags: [Articles]
-      operationId: deleteItem
-      summary: Supprimer un article
+      tags: [Produits]
+      operationId: deleteProduct
+      summary: Supprimer un produit
       responses:
         "204":
-          description: Article supprimé
+          description: Produit supprimé
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          $ref: "#/components/responses/ItemNotFound"
+          $ref: "#/components/responses/ProductNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /items/{id}/stock:
+  /products/{id}/stock:
     parameters:
-      - $ref: "#/components/parameters/ItemId"
+      - $ref: "#/components/parameters/ProductId"
     post:
-      tags: [Articles]
-      operationId: adjustItemStock
+      tags: [Produits]
+      operationId: adjustProductStock
       summary: Ajouter ou retirer du stock
       description: |
         Ajoute `delta` au stock (négatif pour retirer), en une seule opération
@@ -248,7 +248,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
-          $ref: "#/components/responses/ItemNotFound"
+          $ref: "#/components/responses/ProductNotFound"
         "409":
           description: Stock insuffisant pour ce retrait
           content:
@@ -341,7 +341,7 @@ paths:
       tags: [Catégories]
       operationId: deleteCategory
       summary: Supprimer une catégorie
-      description: Les articles de la catégorie sont conservés et n'ont plus de catégorie.
+      description: Les produits de la catégorie sont conservés et n'ont plus de catégorie.
       responses:
         "204":
           description: Catégorie supprimée
@@ -373,18 +373,18 @@ components:
       description: "La même clé, envoyée en `Authorization: Bearer <clé>`."
 
   parameters:
-    ItemId:
+    ProductId:
       name: id
       in: path
       required: true
-      description: Identifiant de l'article
+      description: Identifiant du produit
       schema:
         type: integer
         format: int64
         minimum: 1
 
   schemas:
-    Item:
+    Product:
       type: object
       required: [id, reference, name, description, price_cents, category_id, stock, created_at, updated_at]
       properties:
@@ -412,7 +412,7 @@ components:
           type: integer
           format: int64
           nullable: true
-          description: Catégorie de l'article, `null` s'il n'en a pas
+          description: Catégorie du produit, `null` s'il n'en a pas
           example: 1
         stock:
           type: integer
@@ -427,7 +427,7 @@ components:
           type: string
           format: date-time
 
-    ItemInput:
+    ProductInput:
       type: object
       description: Les champs inconnus sont refusés (400).
       additionalProperties: false
@@ -461,14 +461,14 @@ components:
           minimum: 0
           default: 0
 
-    ItemList:
+    ProductList:
       type: object
-      required: [items, limit, offset]
+      required: [products, limit, offset]
       properties:
-        items:
+        products:
           type: array
           items:
-            $ref: "#/components/schemas/Item"
+            $ref: "#/components/schemas/Product"
         limit:
           type: integer
           description: Limite réellement appliquée
@@ -574,15 +574,15 @@ components:
             $ref: "#/components/schemas/Error"
           example:
             error: missing or invalid API key
-    ItemNotFound:
-      description: Article introuvable
+    ProductNotFound:
+      description: Produit introuvable
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
           example:
-            error: item not found
-    InvalidItem:
+            error: product not found
+    InvalidProduct:
       description: Données invalides (champ obligatoire vide, prix ou stock négatif, catégorie inexistante)
       content:
         application/json:

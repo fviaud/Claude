@@ -38,8 +38,8 @@ func TestOpenAPIRoutesMatch(t *testing.T) {
 	doc := loadSpec(t)
 
 	var inSpec []string
-	for path, item := range doc.Paths.Map() {
-		for method := range item.Operations() {
+	for path, pathItem := range doc.Paths.Map() {
+		for method := range pathItem.Operations() {
 			inSpec = append(inSpec, method+" "+path)
 		}
 	}
@@ -130,35 +130,35 @@ func TestOpenAPIResponsesMatch(t *testing.T) {
 	c.do("POST", "/categories", `{"name":""}`, http.StatusUnprocessableEntity, nil)
 	c.do("GET", "/categories", "", http.StatusOK, nil)
 
-	c.do("POST", "/items", `{"reference":"C1","name":"Chaise","price_cents":4999,"stock":5,"category_id":1}`, http.StatusCreated, nil)
-	c.do("POST", "/items", `{"reference":"L1","name":"Lampe"}`, http.StatusCreated, nil)
-	c.do("POST", "/items", `{"reference":"C1","name":"Doublon"}`, http.StatusConflict, nil)
-	c.do("POST", "/items", `{"reference":"X","name":"X","category_id":99}`, http.StatusUnprocessableEntity, nil)
-	c.do("POST", "/items", `{"reference":"X"}`, http.StatusUnprocessableEntity, nil)
-	c.do("POST", "/items", `not json`, http.StatusBadRequest, nil)
+	c.do("POST", "/products", `{"reference":"C1","name":"Chaise","price_cents":4999,"stock":5,"category_id":1}`, http.StatusCreated, nil)
+	c.do("POST", "/products", `{"reference":"L1","name":"Lampe"}`, http.StatusCreated, nil)
+	c.do("POST", "/products", `{"reference":"C1","name":"Doublon"}`, http.StatusConflict, nil)
+	c.do("POST", "/products", `{"reference":"X","name":"X","category_id":99}`, http.StatusUnprocessableEntity, nil)
+	c.do("POST", "/products", `{"reference":"X"}`, http.StatusUnprocessableEntity, nil)
+	c.do("POST", "/products", `not json`, http.StatusBadRequest, nil)
 
-	c.do("GET", "/items", "", http.StatusOK, nil)
-	c.do("GET", "/items?limit=1&offset=1&category_id=1", "", http.StatusOK, nil)
-	c.do("GET", "/items?limit=-1", "", http.StatusBadRequest, nil)
-	c.do("GET", "/items/2", "", http.StatusOK, nil)
-	c.do("GET", "/items/99", "", http.StatusNotFound, nil)
-	c.do("GET", "/items/abc", "", http.StatusBadRequest, nil)
+	c.do("GET", "/products", "", http.StatusOK, nil)
+	c.do("GET", "/products?limit=1&offset=1&category_id=1", "", http.StatusOK, nil)
+	c.do("GET", "/products?limit=-1", "", http.StatusBadRequest, nil)
+	c.do("GET", "/products/2", "", http.StatusOK, nil)
+	c.do("GET", "/products/99", "", http.StatusNotFound, nil)
+	c.do("GET", "/products/abc", "", http.StatusBadRequest, nil)
 
-	c.do("PUT", "/items/2", `{"reference":"L1","name":"Lampe","category_id":null}`, http.StatusOK, nil)
-	c.do("PUT", "/items/99", `{"reference":"Z","name":"Z"}`, http.StatusNotFound, nil)
-	c.do("PUT", "/items/2", `{"reference":"C1","name":"Lampe"}`, http.StatusConflict, nil)
+	c.do("PUT", "/products/2", `{"reference":"L1","name":"Lampe","category_id":null}`, http.StatusOK, nil)
+	c.do("PUT", "/products/99", `{"reference":"Z","name":"Z"}`, http.StatusNotFound, nil)
+	c.do("PUT", "/products/2", `{"reference":"C1","name":"Lampe"}`, http.StatusConflict, nil)
 
-	c.do("POST", "/items/1/stock", `{"delta":-2}`, http.StatusOK, nil)
-	c.do("POST", "/items/1/stock", `{"delta":-10}`, http.StatusConflict, nil)
-	c.do("POST", "/items/1/stock", `{"delta":0}`, http.StatusUnprocessableEntity, nil)
-	c.do("POST", "/items/99/stock", `{"delta":1}`, http.StatusNotFound, nil)
+	c.do("POST", "/products/1/stock", `{"delta":-2}`, http.StatusOK, nil)
+	c.do("POST", "/products/1/stock", `{"delta":-10}`, http.StatusConflict, nil)
+	c.do("POST", "/products/1/stock", `{"delta":0}`, http.StatusUnprocessableEntity, nil)
+	c.do("POST", "/products/99/stock", `{"delta":1}`, http.StatusNotFound, nil)
 
-	c.do("DELETE", "/items/2", "", http.StatusNoContent, nil)
-	c.do("DELETE", "/items/2", "", http.StatusNotFound, nil)
+	c.do("DELETE", "/products/2", "", http.StatusNoContent, nil)
+	c.do("DELETE", "/products/2", "", http.StatusNotFound, nil)
 	c.do("DELETE", "/categories/1", "", http.StatusNoContent, nil)
 	c.do("DELETE", "/categories/1", "", http.StatusNotFound, nil)
 
 	c.key = ""
-	c.do("GET", "/items", "", http.StatusUnauthorized, nil)
+	c.do("GET", "/products", "", http.StatusUnauthorized, nil)
 	c.do("DELETE", "/categories/1", "", http.StatusUnauthorized, nil)
 }

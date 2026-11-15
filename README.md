@@ -1,6 +1,6 @@
 # Claude
 
-API HTTP en Go pour gérer un catalogue d'articles (catégories, prix, stock),
+API HTTP en Go pour gérer un catalogue de produits (catégories, prix, stock),
 stocké dans PostgreSQL.
 
 ## Structure
@@ -13,7 +13,7 @@ stocké dans PostgreSQL.
 │   ├── openapi.yaml   # spécification OpenAPI 3 de l'API
 │   └── schema.md      # schéma détaillé de la base de données
 ├── internal/
-│   ├── catalogue/     # accès aux tables catalogue et categories
+│   ├── catalogue/     # accès aux tables products et categories
 │   ├── database/      # pool de connexions PostgreSQL (pgx) et migrations
 │   │   └── migrations/  # fichiers SQL appliqués au démarrage
 │   └── httpapi/       # routes et handlers JSON
@@ -43,6 +43,7 @@ cp .env.example .env   # le Makefile charge .env automatiquement
 make db-up             # démarre PostgreSQL avec Docker
 make run               # applique les migrations et démarre l'API sur :8080
 make db-down           # arrête PostgreSQL
+make db-reset          # supprime la base locale (recréée au prochain démarrage)
 ```
 
 ### Migrations
@@ -56,7 +57,7 @@ modifier un fichier déjà appliqué.
 Le schéma détaillé, avec diagramme et règles métier, est dans
 [`docs/schema.md`](docs/schema.md).
 
-### Table `catalogue`
+### Table `products`
 
 | Colonne       | Type          | Remarque                         |
 |---------------|---------------|----------------------------------|
@@ -78,7 +79,7 @@ Le schéma détaillé, avec diagramme et règles métier, est dans
 | `name`       | `TEXT`        | obligatoire, unique           |
 | `created_at` | `TIMESTAMPTZ` | date de création              |
 
-Supprimer une catégorie conserve ses articles, qui n'ont alors plus de catégorie.
+Supprimer une catégorie conserve ses produits, qui n'ont alors plus de catégorie.
 Le stock se modifie avec `AdjustStock`, qui refuse de le rendre négatif.
 
 ## API
@@ -105,8 +106,8 @@ mettre à jour `docs/openapi.yaml` fait échouer `make test`.
 Toutes les routes sauf `/healthz` exigent une clé d'API, envoyée au choix :
 
 ```sh
-curl -H 'X-API-Key: <clé>' localhost:8080/items
-curl -H 'Authorization: Bearer <clé>' localhost:8080/items
+curl -H 'X-API-Key: <clé>' localhost:8080/products
+curl -H 'Authorization: Bearer <clé>' localhost:8080/products
 ```
 
 Sans clé valide, l'API répond `401`. Les clés sont définies dans `API_KEYS`
@@ -119,17 +120,17 @@ Générer une clé : `openssl rand -hex 32`.
 | Méthode  | Route                  | Rôle                                             |
 |----------|------------------------|--------------------------------------------------|
 | `GET`    | `/healthz`             | état du service et de la base                    |
-| `GET`    | `/items`               | liste (`?limit=50&offset=0&category_id=1`)       |
-| `POST`   | `/items`               | crée un article                                  |
-| `GET`    | `/items/{id}`          | lit un article                                   |
-| `PUT`    | `/items/{id}`          | remplace un article (tous les champs)            |
-| `DELETE` | `/items/{id}`          | supprime un article                              |
-| `POST`   | `/items/{id}/stock`    | ajoute ou retire du stock : `{"delta": -2}`      |
+| `GET`    | `/products`               | liste (`?limit=50&offset=0&category_id=1`)       |
+| `POST`   | `/products`               | crée un produit                                  |
+| `GET`    | `/products/{id}`          | lit un produit                                   |
+| `PUT`    | `/products/{id}`          | remplace un produit (tous les champs)            |
+| `DELETE` | `/products/{id}`          | supprime un produit                              |
+| `POST`   | `/products/{id}/stock`    | ajoute ou retire du stock : `{"delta": -2}`      |
 | `GET`    | `/categories`          | liste les catégories                             |
 | `POST`   | `/categories`          | crée une catégorie : `{"name": "Meubles"}`       |
-| `DELETE` | `/categories/{id}`     | supprime une catégorie (ses articles restent)    |
+| `DELETE` | `/categories/{id}`     | supprime une catégorie (ses produits restent)    |
 
-Corps de `POST /items` et `PUT /items/{id}` :
+Corps de `POST /products` et `PUT /products/{id}` :
 
 ```json
 {
@@ -154,10 +155,10 @@ Exemple :
 ```sh
 K='X-API-Key: change-me-dev-key'
 curl -H "$K" -X POST localhost:8080/categories -d '{"name":"Meubles"}'
-curl -H "$K" -X POST localhost:8080/items \
+curl -H "$K" -X POST localhost:8080/products \
   -d '{"reference":"C1","name":"Chaise","price_cents":4999,"stock":5,"category_id":1}'
-curl -H "$K" -X POST localhost:8080/items/1/stock -d '{"delta":-2}'
-curl -H "$K" 'localhost:8080/items?category_id=1'
+curl -H "$K" -X POST localhost:8080/products/1/stock -d '{"delta":-2}'
+curl -H "$K" 'localhost:8080/products?category_id=1'
 ```
 
 ## Docker

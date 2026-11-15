@@ -16,12 +16,12 @@ import (
 // Store is the subset of catalogue.Repository the API needs. It lets tests
 // use an in-memory fake.
 type Store interface {
-	Create(ctx context.Context, it catalogue.Item) (catalogue.Item, error)
-	Get(ctx context.Context, id int64) (catalogue.Item, error)
-	List(ctx context.Context, limit, offset int) ([]catalogue.Item, error)
-	ListByCategory(ctx context.Context, categoryID int64, limit, offset int) ([]catalogue.Item, error)
-	Update(ctx context.Context, it catalogue.Item) (catalogue.Item, error)
-	Delete(ctx context.Context, id int64) error
+	CreateProduct(ctx context.Context, p catalogue.Product) (catalogue.Product, error)
+	GetProduct(ctx context.Context, id int64) (catalogue.Product, error)
+	ListProducts(ctx context.Context, limit, offset int) ([]catalogue.Product, error)
+	ListProductsByCategory(ctx context.Context, categoryID int64, limit, offset int) ([]catalogue.Product, error)
+	UpdateProduct(ctx context.Context, p catalogue.Product) (catalogue.Product, error)
+	DeleteProduct(ctx context.Context, id int64) error
 	AdjustStock(ctx context.Context, id int64, delta int32) (int32, error)
 	CreateCategory(ctx context.Context, name string) (catalogue.Category, error)
 	ListCategories(ctx context.Context) ([]catalogue.Category, error)
@@ -69,12 +69,12 @@ type route struct {
 // docs/openapi.yaml in sync: TestOpenAPIRoutesMatch fails otherwise.
 func (s *Server) protectedRoutes() []route {
 	return []route{
-		{"GET /items", s.listItems},
-		{"POST /items", s.createItem},
-		{"GET /items/{id}", s.getItem},
-		{"PUT /items/{id}", s.updateItem},
-		{"DELETE /items/{id}", s.deleteItem},
-		{"POST /items/{id}/stock", s.adjustStock},
+		{"GET /products", s.listProducts},
+		{"POST /products", s.createProduct},
+		{"GET /products/{id}", s.getProduct},
+		{"PUT /products/{id}", s.updateProduct},
+		{"DELETE /products/{id}", s.deleteProduct},
+		{"POST /products/{id}/stock", s.adjustStock},
 		{"GET /categories", s.listCategories},
 		{"POST /categories", s.createCategory},
 		{"DELETE /categories/{id}", s.deleteCategory},
@@ -129,8 +129,8 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 // are logged and reported as 500 without leaking details.
 func (s *Server) storeError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, catalogue.ErrNotFound):
-		writeError(w, http.StatusNotFound, "item not found")
+	case errors.Is(err, catalogue.ErrProductNotFound):
+		writeError(w, http.StatusNotFound, "product not found")
 	case errors.Is(err, catalogue.ErrDuplicateReference):
 		writeError(w, http.StatusConflict, "reference already exists")
 	case errors.Is(err, catalogue.ErrDuplicateCategory):

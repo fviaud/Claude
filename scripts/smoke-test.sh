@@ -90,20 +90,20 @@ wait_for "API" 30 curl -sf "$URL/healthz"
 
 log "HTTP checks"
 check "GET /healthz without key" 200 "$URL/healthz"
-check "GET /items without key" 401 "$URL/items"
-check "GET /items with wrong key" 401 -H "X-API-Key: wrong" "$URL/items"
-check "GET /items with X-API-Key" 200 -H "X-API-Key: $KEY" "$URL/items"
-check "GET /items with Bearer token" 200 -H "Authorization: Bearer $KEY" "$URL/items"
+check "GET /products without key" 401 "$URL/products"
+check "GET /products with wrong key" 401 -H "X-API-Key: wrong" "$URL/products"
+check "GET /products with X-API-Key" 200 -H "X-API-Key: $KEY" "$URL/products"
+check "GET /products with Bearer token" 200 -H "Authorization: Bearer $KEY" "$URL/products"
 check "POST /categories" 201 -H "X-API-Key: $KEY" -X POST -d '{"name":"Meubles"}' "$URL/categories"
-check "POST /items" 201 -H "X-API-Key: $KEY" -X POST \
-	-d '{"reference":"C1","name":"Chaise","price_cents":4999,"stock":5,"category_id":1}' "$URL/items"
-check "POST /items duplicate reference" 409 -H "X-API-Key: $KEY" -X POST \
-	-d '{"reference":"C1","name":"Autre"}' "$URL/items"
-check "POST /items/1/stock -3" 200 -H "X-API-Key: $KEY" -X POST -d '{"delta":-3}' "$URL/items/1/stock"
-check "POST /items/1/stock -3 (insufficient)" 409 -H "X-API-Key: $KEY" -X POST -d '{"delta":-3}' "$URL/items/1/stock"
-check "GET /items/1" 200 -H "X-API-Key: $KEY" "$URL/items/1"
+check "POST /products" 201 -H "X-API-Key: $KEY" -X POST \
+	-d '{"reference":"C1","name":"Chaise","price_cents":4999,"stock":5,"category_id":1}' "$URL/products"
+check "POST /products duplicate reference" 409 -H "X-API-Key: $KEY" -X POST \
+	-d '{"reference":"C1","name":"Autre"}' "$URL/products"
+check "POST /products/1/stock -3" 200 -H "X-API-Key: $KEY" -X POST -d '{"delta":-3}' "$URL/products/1/stock"
+check "POST /products/1/stock -3 (insufficient)" 409 -H "X-API-Key: $KEY" -X POST -d '{"delta":-3}' "$URL/products/1/stock"
+check "GET /products/1" 200 -H "X-API-Key: $KEY" "$URL/products/1"
 
-stock=$(curl -s -H "X-API-Key: $KEY" "$URL/items/1" | grep -o '"stock":[0-9]*' | cut -d: -f2)
+stock=$(curl -s -H "X-API-Key: $KEY" "$URL/products/1" | grep -o '"stock":[0-9]*' | cut -d: -f2)
 if [[ $stock == 2 ]]; then
 	echo "  ok    stock is 2 after the adjustments"
 else

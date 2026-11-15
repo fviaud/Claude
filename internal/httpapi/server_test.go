@@ -17,18 +17,18 @@ import (
 
 // fakeStore is an in-memory Store that mimics the repository's errors.
 type fakeStore struct {
-	items      map[int64]catalogue.Item
-	cats       map[int64]catalogue.Category
-	nextItemID int64 // separate sequences, as in PostgreSQL
-	nextCatID  int64
+	products      map[int64]catalogue.Product
+	cats          map[int64]catalogue.Category
+	nextProductID int64 // separate sequences, as in PostgreSQL
+	nextCatID     int64
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{items: map[int64]catalogue.Item{}, cats: map[int64]catalogue.Category{}}
+	return &fakeStore{products: map[int64]catalogue.Product{}, cats: map[int64]catalogue.Category{}}
 }
 
-func (f *fakeStore) check(it catalogue.Item) error {
-	for _, o := range f.items {
+func (f *fakeStore) check(it catalogue.Product) error {
+	for _, o := range f.products {
 		if o.Reference == it.Reference && o.ID != it.ID {
 			return catalogue.ErrDuplicateReference
 		}
@@ -41,27 +41,27 @@ func (f *fakeStore) check(it catalogue.Item) error {
 	return nil
 }
 
-func (f *fakeStore) Create(_ context.Context, it catalogue.Item) (catalogue.Item, error) {
+func (f *fakeStore) CreateProduct(_ context.Context, it catalogue.Product) (catalogue.Product, error) {
 	if err := f.check(it); err != nil {
-		return catalogue.Item{}, err
+		return catalogue.Product{}, err
 	}
-	f.nextItemID++
-	it.ID = f.nextItemID
-	f.items[it.ID] = it
+	f.nextProductID++
+	it.ID = f.nextProductID
+	f.products[it.ID] = it
 	return it, nil
 }
 
-func (f *fakeStore) Get(_ context.Context, id int64) (catalogue.Item, error) {
-	it, ok := f.items[id]
+func (f *fakeStore) GetProduct(_ context.Context, id int64) (catalogue.Product, error) {
+	it, ok := f.products[id]
 	if !ok {
-		return catalogue.Item{}, catalogue.ErrNotFound
+		return catalogue.Product{}, catalogue.ErrProductNotFound
 	}
 	return it, nil
 }
 
-func (f *fakeStore) filter(keep func(catalogue.Item) bool, limit, offset int) []catalogue.Item {
-	var out []catalogue.Item
-	for _, it := range f.items {
+func (f *fakeStore) filter(keep func(catalogue.Product) bool, limit, offset int) []catalogue.Product {
+	var out []catalogue.Product
+	for _, it := range f.products {
 		if keep(it) {
 			out = append(out, it)
 		}
@@ -73,43 +73,43 @@ func (f *fakeStore) filter(keep func(catalogue.Item) bool, limit, offset int) []
 	return out[offset:min(offset+limit, len(out))]
 }
 
-func (f *fakeStore) List(_ context.Context, limit, offset int) ([]catalogue.Item, error) {
-	return f.filter(func(catalogue.Item) bool { return true }, limit, offset), nil
+func (f *fakeStore) ListProducts(_ context.Context, limit, offset int) ([]catalogue.Product, error) {
+	return f.filter(func(catalogue.Product) bool { return true }, limit, offset), nil
 }
 
-func (f *fakeStore) ListByCategory(_ context.Context, cat int64, limit, offset int) ([]catalogue.Item, error) {
-	return f.filter(func(it catalogue.Item) bool { return it.CategoryID != nil && *it.CategoryID == cat }, limit, offset), nil
+func (f *fakeStore) ListProductsByCategory(_ context.Context, cat int64, limit, offset int) ([]catalogue.Product, error) {
+	return f.filter(func(it catalogue.Product) bool { return it.CategoryID != nil && *it.CategoryID == cat }, limit, offset), nil
 }
 
-func (f *fakeStore) Update(_ context.Context, it catalogue.Item) (catalogue.Item, error) {
-	if _, ok := f.items[it.ID]; !ok {
-		return catalogue.Item{}, catalogue.ErrNotFound
+func (f *fakeStore) UpdateProduct(_ context.Context, it catalogue.Product) (catalogue.Product, error) {
+	if _, ok := f.products[it.ID]; !ok {
+		return catalogue.Product{}, catalogue.ErrProductNotFound
 	}
 	if err := f.check(it); err != nil {
-		return catalogue.Item{}, err
+		return catalogue.Product{}, err
 	}
-	f.items[it.ID] = it
+	f.products[it.ID] = it
 	return it, nil
 }
 
-func (f *fakeStore) Delete(_ context.Context, id int64) error {
-	if _, ok := f.items[id]; !ok {
-		return catalogue.ErrNotFound
+func (f *fakeStore) DeleteProduct(_ context.Context, id int64) error {
+	if _, ok := f.products[id]; !ok {
+		return catalogue.ErrProductNotFound
 	}
-	delete(f.items, id)
+	delete(f.products, id)
 	return nil
 }
 
 func (f *fakeStore) AdjustStock(_ context.Context, id int64, delta int32) (int32, error) {
-	it, ok := f.items[id]
+	it, ok := f.products[id]
 	if !ok {
-		return 0, catalogue.ErrNotFound
+		return 0, catalogue.ErrProductNotFound
 	}
 	if it.Stock+delta < 0 {
 		return 0, catalogue.ErrInsufficientStock
 	}
 	it.Stock += delta
-	f.items[id] = it
+	f.products[id] = it
 	return it.Stock, nil
 }
 
@@ -198,7 +198,7 @@ func TestHealth(t *testing.T) {
 		do("GET", "/healthz", "", http.StatusServiceUnavailable, nil)
 }
 
-func TestItemsLifecycle(t *testing.T) {
+func TestProductsLifecycle(t *testing.T) {
 	c := newClient(t, nil)
 
 	var cat categoryResponse
@@ -206,39 +206,39 @@ func TestItemsLifecycle(t *testing.T) {
 	c.do("POST", "/categories", `{"name":"Meubles"}`, http.StatusConflict, nil)
 	c.do("POST", "/categories", `{"name":"  "}`, http.StatusUnprocessableEntity, nil)
 
-	var created itemResponse
-	c.do("POST", "/items",
+	var created productResponse
+	c.do("POST", "/products",
 		`{"reference":"C1","name":"Chaise","price_cents":4999,"stock":3,"category_id":`+itoa(cat.ID)+`}`,
 		http.StatusCreated, &created)
 	if created.ID == 0 || created.Stock != 3 || created.CategoryID == nil || *created.CategoryID != cat.ID {
 		t.Fatalf("created = %+v", created)
 	}
-	c.do("POST", "/items", `{"reference":"C1","name":"Autre"}`, http.StatusConflict, nil)
-	c.do("POST", "/items", `{"reference":"T1","name":"Table"}`, http.StatusCreated, nil)
-	c.do("POST", "/items", `{"reference":"X","name":"X","category_id":999}`, http.StatusUnprocessableEntity, nil)
+	c.do("POST", "/products", `{"reference":"C1","name":"Autre"}`, http.StatusConflict, nil)
+	c.do("POST", "/products", `{"reference":"T1","name":"Table"}`, http.StatusCreated, nil)
+	c.do("POST", "/products", `{"reference":"X","name":"X","category_id":999}`, http.StatusUnprocessableEntity, nil)
 
-	path := "/items/" + itoa(created.ID)
-	var got itemResponse
+	path := "/products/" + itoa(created.ID)
+	var got productResponse
 	c.do("GET", path, "", http.StatusOK, &got)
 	if got.Name != "Chaise" {
 		t.Fatalf("got = %+v", got)
 	}
 
-	var list itemListResponse
-	c.do("GET", "/items", "", http.StatusOK, &list)
-	if len(list.Items) != 2 || list.Limit != defaultLimit {
+	var list productListResponse
+	c.do("GET", "/products", "", http.StatusOK, &list)
+	if len(list.Products) != 2 || list.Limit != defaultLimit {
 		t.Fatalf("list = %+v", list)
 	}
-	c.do("GET", "/items?category_id="+itoa(cat.ID), "", http.StatusOK, &list)
-	if len(list.Items) != 1 || list.Items[0].ID != created.ID {
+	c.do("GET", "/products?category_id="+itoa(cat.ID), "", http.StatusOK, &list)
+	if len(list.Products) != 1 || list.Products[0].ID != created.ID {
 		t.Fatalf("list by category = %+v", list)
 	}
-	c.do("GET", "/items?limit=1&offset=1", "", http.StatusOK, &list)
-	if len(list.Items) != 1 || list.Items[0].Name != "Table" {
+	c.do("GET", "/products?limit=1&offset=1", "", http.StatusOK, &list)
+	if len(list.Products) != 1 || list.Products[0].Name != "Table" {
 		t.Fatalf("paginated list = %+v", list)
 	}
 
-	var updated itemResponse
+	var updated productResponse
 	c.do("PUT", path, `{"reference":"C1","name":"Chaise pliante","price_cents":3999,"stock":3}`, http.StatusOK, &updated)
 	if updated.Name != "Chaise pliante" || updated.CategoryID != nil {
 		t.Fatalf("updated = %+v", updated)
@@ -263,22 +263,22 @@ func TestBadRequests(t *testing.T) {
 		method, path, body string
 		want               int
 	}{
-		{"GET", "/items/abc", "", http.StatusBadRequest},
-		{"GET", "/items/0", "", http.StatusBadRequest},
-		{"GET", "/items?limit=-1", "", http.StatusBadRequest},
-		{"GET", "/items?category_id=x", "", http.StatusBadRequest},
-		{"POST", "/items", `not json`, http.StatusBadRequest},
-		{"POST", "/items", `{"reference":"A","name":"A","unknown":1}`, http.StatusBadRequest},
-		{"POST", "/items", `{"name":"A"}`, http.StatusUnprocessableEntity},
-		{"POST", "/items", `{"reference":"A","name":"A","price_cents":-1}`, http.StatusUnprocessableEntity},
-		{"POST", "/items", `{"reference":"A","name":"A","stock":-1}`, http.StatusUnprocessableEntity},
-		{"PUT", "/items/42", `{"reference":"A","name":"A"}`, http.StatusNotFound},
-		{"POST", "/items/42/stock", `{}`, http.StatusUnprocessableEntity},
-		{"POST", "/items/42/stock", `{"delta":0}`, http.StatusUnprocessableEntity},
-		{"POST", "/items/42/stock", `{"delta":99999999999}`, http.StatusUnprocessableEntity},
-		{"POST", "/items/42/stock", `{"delta":1}`, http.StatusNotFound},
-		{"DELETE", "/items/42", "", http.StatusNotFound},
-		{"PATCH", "/items/42", "", http.StatusMethodNotAllowed},
+		{"GET", "/products/abc", "", http.StatusBadRequest},
+		{"GET", "/products/0", "", http.StatusBadRequest},
+		{"GET", "/products?limit=-1", "", http.StatusBadRequest},
+		{"GET", "/products?category_id=x", "", http.StatusBadRequest},
+		{"POST", "/products", `not json`, http.StatusBadRequest},
+		{"POST", "/products", `{"reference":"A","name":"A","unknown":1}`, http.StatusBadRequest},
+		{"POST", "/products", `{"name":"A"}`, http.StatusUnprocessableEntity},
+		{"POST", "/products", `{"reference":"A","name":"A","price_cents":-1}`, http.StatusUnprocessableEntity},
+		{"POST", "/products", `{"reference":"A","name":"A","stock":-1}`, http.StatusUnprocessableEntity},
+		{"PUT", "/products/42", `{"reference":"A","name":"A"}`, http.StatusNotFound},
+		{"POST", "/products/42/stock", `{}`, http.StatusUnprocessableEntity},
+		{"POST", "/products/42/stock", `{"delta":0}`, http.StatusUnprocessableEntity},
+		{"POST", "/products/42/stock", `{"delta":99999999999}`, http.StatusUnprocessableEntity},
+		{"POST", "/products/42/stock", `{"delta":1}`, http.StatusNotFound},
+		{"DELETE", "/products/42", "", http.StatusNotFound},
+		{"PATCH", "/products/42", "", http.StatusMethodNotAllowed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path+" "+tt.body, func(t *testing.T) {
@@ -313,15 +313,15 @@ func TestAPIKey(t *testing.T) {
 
 	c.key = ""
 	c.do("GET", "/healthz", "", http.StatusOK, nil) // public
-	c.do("GET", "/items", "", http.StatusUnauthorized, nil)
-	c.do("POST", "/items", `{"reference":"A","name":"A"}`, http.StatusUnauthorized, nil)
+	c.do("GET", "/products", "", http.StatusUnauthorized, nil)
+	c.do("POST", "/products", `{"reference":"A","name":"A"}`, http.StatusUnauthorized, nil)
 	c.do("GET", "/does-not-exist", "", http.StatusUnauthorized, nil)
 
 	c.key = "wrong"
-	c.do("GET", "/items", "", http.StatusUnauthorized, nil)
+	c.do("GET", "/products", "", http.StatusUnauthorized, nil)
 
 	c.key = "second-key" // every configured key is accepted
-	c.do("GET", "/items", "", http.StatusOK, nil)
+	c.do("GET", "/products", "", http.StatusOK, nil)
 	c.do("GET", "/does-not-exist", "", http.StatusNotFound, nil)
 
 	for _, tt := range []struct {
@@ -334,7 +334,7 @@ func TestAPIKey(t *testing.T) {
 		{"Basic " + testKey, http.StatusUnauthorized},
 		{testKey, http.StatusUnauthorized},
 	} {
-		req, _ := http.NewRequest("GET", c.srv.URL+"/items", nil)
+		req, _ := http.NewRequest("GET", c.srv.URL+"/products", nil)
 		req.Header.Set("Authorization", tt.header)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {

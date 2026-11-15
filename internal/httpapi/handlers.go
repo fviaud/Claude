@@ -16,7 +16,7 @@ const (
 	maxLimit     = 200
 )
 
-type itemResponse struct {
+type productResponse struct {
 	ID          int64     `json:"id"`
 	Reference   string    `json:"reference"`
 	Name        string    `json:"name"`
@@ -28,16 +28,16 @@ type itemResponse struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-func toItemResponse(it catalogue.Item) itemResponse {
-	return itemResponse{
-		ID: it.ID, Reference: it.Reference, Name: it.Name, Description: it.Description,
-		PriceCents: it.PriceCents, CategoryID: it.CategoryID, Stock: it.Stock,
-		CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt,
+func toProductResponse(p catalogue.Product) productResponse {
+	return productResponse{
+		ID: p.ID, Reference: p.Reference, Name: p.Name, Description: p.Description,
+		PriceCents: p.PriceCents, CategoryID: p.CategoryID, Stock: p.Stock,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
 
-// itemRequest is the body of POST /items and PUT /items/{id}.
-type itemRequest struct {
+// productRequest is the body of POST /products and PUT /products/{id}.
+type productRequest struct {
 	Reference   string `json:"reference"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -46,7 +46,7 @@ type itemRequest struct {
 	Stock       int32  `json:"stock"`
 }
 
-func (req itemRequest) validate() string {
+func (req productRequest) validate() string {
 	var problems []string
 	if strings.TrimSpace(req.Reference) == "" {
 		problems = append(problems, "reference is required")
@@ -63,18 +63,18 @@ func (req itemRequest) validate() string {
 	return strings.Join(problems, "; ")
 }
 
-func (req itemRequest) toItem(id int64) catalogue.Item {
-	return catalogue.Item{
+func (req productRequest) toProduct(id int64) catalogue.Product {
+	return catalogue.Product{
 		ID: id, Reference: strings.TrimSpace(req.Reference), Name: strings.TrimSpace(req.Name),
 		Description: req.Description, PriceCents: req.PriceCents,
 		CategoryID: req.CategoryID, Stock: req.Stock,
 	}
 }
 
-type itemListResponse struct {
-	Items  []itemResponse `json:"items"`
-	Limit  int            `json:"limit"`
-	Offset int            `json:"offset"`
+type productListResponse struct {
+	Products []productResponse `json:"products"`
+	Limit    int               `json:"limit"`
+	Offset   int               `json:"offset"`
 }
 
 // pathID parses the {id} path parameter. It writes a 400 and returns false
@@ -101,7 +101,7 @@ func queryInt(r *http.Request, name string, def int) (int, error) {
 	return n, nil
 }
 
-func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listProducts(w http.ResponseWriter, r *http.Request) {
 	limit, err := queryInt(r, "limit", defaultLimit)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -114,35 +114,35 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var items []catalogue.Item
+	var products []catalogue.Product
 	if c := r.URL.Query().Get("category_id"); c != "" {
 		categoryID, err := strconv.ParseInt(c, 10, 64)
 		if err != nil || categoryID <= 0 {
 			writeError(w, http.StatusBadRequest, "category_id must be a positive integer")
 			return
 		}
-		items, err = s.store.ListByCategory(r.Context(), categoryID, limit, offset)
+		products, err = s.store.ListProductsByCategory(r.Context(), categoryID, limit, offset)
 		if err != nil {
 			s.storeError(w, err)
 			return
 		}
 	} else {
-		items, err = s.store.List(r.Context(), limit, offset)
+		products, err = s.store.ListProducts(r.Context(), limit, offset)
 		if err != nil {
 			s.storeError(w, err)
 			return
 		}
 	}
 
-	resp := itemListResponse{Items: make([]itemResponse, 0, len(items)), Limit: limit, Offset: offset}
-	for _, it := range items {
-		resp.Items = append(resp.Items, toItemResponse(it))
+	resp := productListResponse{Products: make([]productResponse, 0, len(products)), Limit: limit, Offset: offset}
+	for _, p := range products {
+		resp.Products = append(resp.Products, toProductResponse(p))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
-	var req itemRequest
+func (s *Server) createProduct(w http.ResponseWriter, r *http.Request) {
+	var req productRequest
 	if !decode(w, r, &req) {
 		return
 	}
@@ -150,34 +150,34 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, msg)
 		return
 	}
-	it, err := s.store.Create(r.Context(), req.toItem(0))
+	p, err := s.store.CreateProduct(r.Context(), req.toProduct(0))
 	if err != nil {
-		s.itemWriteError(w, err)
+		s.productWriteError(w, err)
 		return
 	}
-	w.Header().Set("Location", "/items/"+strconv.FormatInt(it.ID, 10))
-	writeJSON(w, http.StatusCreated, toItemResponse(it))
+	w.Header().Set("Location", "/products/"+strconv.FormatInt(p.ID, 10))
+	writeJSON(w, http.StatusCreated, toProductResponse(p))
 }
 
-func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getProduct(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
 		return
 	}
-	it, err := s.store.Get(r.Context(), id)
+	p, err := s.store.GetProduct(r.Context(), id)
 	if err != nil {
 		s.storeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toItemResponse(it))
+	writeJSON(w, http.StatusOK, toProductResponse(p))
 }
 
-func (s *Server) updateItem(w http.ResponseWriter, r *http.Request) {
+func (s *Server) updateProduct(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
 		return
 	}
-	var req itemRequest
+	var req productRequest
 	if !decode(w, r, &req) {
 		return
 	}
@@ -185,17 +185,17 @@ func (s *Server) updateItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, msg)
 		return
 	}
-	it, err := s.store.Update(r.Context(), req.toItem(id))
+	p, err := s.store.UpdateProduct(r.Context(), req.toProduct(id))
 	if err != nil {
-		s.itemWriteError(w, err)
+		s.productWriteError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toItemResponse(it))
+	writeJSON(w, http.StatusOK, toProductResponse(p))
 }
 
-// itemWriteError handles errors from Create and Update: a missing category
+// productWriteError handles errors from CreateProduct and UpdateProduct: a missing category
 // there is a problem with the request body, not a missing resource.
-func (s *Server) itemWriteError(w http.ResponseWriter, err error) {
+func (s *Server) productWriteError(w http.ResponseWriter, err error) {
 	if errors.Is(err, catalogue.ErrCategoryNotFound) {
 		writeError(w, http.StatusUnprocessableEntity, "category_id does not exist")
 		return
@@ -203,12 +203,12 @@ func (s *Server) itemWriteError(w http.ResponseWriter, err error) {
 	s.storeError(w, err)
 }
 
-func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
+func (s *Server) deleteProduct(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
 		return
 	}
-	if err := s.store.Delete(r.Context(), id); err != nil {
+	if err := s.store.DeleteProduct(r.Context(), id); err != nil {
 		s.storeError(w, err)
 		return
 	}

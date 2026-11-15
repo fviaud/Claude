@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration fmt vet clean db-up db-down docker-build up down smoke-test
+.PHONY: build run test test-integration fmt vet clean db-up db-down db-reset docker-build up down smoke-test
 
 BINARY := bin/claude
 
@@ -32,6 +32,10 @@ db-up:
 
 db-down:
 	docker compose down
+
+# Deletes the local database volume: everything is recreated on next start.
+db-reset:
+	docker compose down -v
 
 docker-build:
 	docker build -t claude:latest .

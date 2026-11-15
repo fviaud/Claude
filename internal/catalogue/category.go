@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Category groups catalogue items. Deleting a category leaves its items
+// Category groups products. Deleting a category leaves its products
 // without a category.
 type Category struct {
 	ID        int64
@@ -40,7 +40,7 @@ func (r *Repository) ListCategories(ctx context.Context) ([]Category, error) {
 	return cats, nil
 }
 
-// DeleteCategory removes a category. Its items are kept, without a category.
+// DeleteCategory removes a category. Its products are kept, without a category.
 func (r *Repository) DeleteCategory(ctx context.Context, id int64) error {
 	tag, err := r.pool.Exec(ctx, "DELETE FROM categories WHERE id = $1", id)
 	if err != nil {
