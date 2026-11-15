@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Go tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: claude
+          POSTGRES_PASSWORD: claude
+          POSTGRES_DB: claude
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U claude -d claude"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Tests (unit + integration)
+        env:
+          TEST_DATABASE_URL: postgres://claude:claude@localhost:5432/claude?sslmode=disable
+        run: go test -count=1 -p 1 -race ./...
+
+  docker:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Smoke test
+        run: scripts/smoke-test.sh

@@ -1,0 +1,600 @@
+openapi: 3.0.3
+
+info:
+  title: Catalogue API
+  version: 1.0.0
+  description: |
+    API JSON de gestion d'un catalogue de produits : catégories, prix et stock.
+
+    **Authentification** : toutes les routes sauf `/healthz` exigent une clé
+    d'API, envoyée dans l'en-tête `X-API-Key` ou en `Authorization: Bearer`.
+
+    **Erreurs** : toutes les erreurs ont la forme `{"error": "message"}`.
+
+    **Prix** : exprimés en centimes (`4999` = 49,99) pour éviter les erreurs
+    d'arrondi.
+
+servers:
+  - url: http://localhost:8080
+    description: Développement local
+
+security:
+  - ApiKeyHeader: []
+  - BearerAuth: []
+
+tags:
+  - name: Santé
+    description: État du service
+  - name: Produits
+    description: Produits du catalogue et leur stock
+  - name: Catégories
+    description: Catégories de produits
+
+paths:
+  /healthz:
+    get:
+      tags: [Santé]
+      operationId: getHealth
+      summary: Vérifier l'état du service
+      description: Vérifie que l'API et la base de données répondent. Ne demande pas de clé d'API.
+      security: []
+      responses:
+        "200":
+          description: Service et base disponibles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: Base de données indisponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: database unavailable
+
+  /products:
+    get:
+      tags: [Produits]
+      operationId: listProducts
+      summary: Lister les produits
+      description: Produits triés par nom, avec pagination et filtre facultatif par catégorie.
+      parameters:
+        - name: limit
+          in: query
+          description: Nombre maximum de produits renvoyés. Ramené entre 1 et 200.
+          schema:
+            type: integer
+            minimum: 0
+            default: 50
+        - name: offset
+          in: query
+          description: Nombre de produits à sauter.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: category_id
+          in: query
+          description: Ne renvoyer que les produits de cette catégorie.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "200":
+          description: Page de produits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Produits]
+      operationId: createProduct
+      summary: Créer un produit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+            example:
+              reference: C1
+              name: Chaise
+              description: En bois
+              price_cents: 4999
+              category_id: 1
+              stock: 5
+      responses:
+        "201":
+          description: Produit créé
+          headers:
+            Location:
+              description: Chemin du nouveau produit, par exemple `/products/1`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Référence déjà utilisée
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: reference already exists
+        "422":
+          $ref: "#/components/responses/InvalidProduct"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProductId"
+    get:
+      tags: [Produits]
+      operationId: getProduct
+      summary: Lire un produit
+      responses:
+        "200":
+          description: Le produit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ProductNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [Produits]
+      operationId: updateProduct
+      summary: Remplacer un produit
+      description: |
+        Remplace tous les champs modifiables. Un champ absent prend sa valeur
+        par défaut : par exemple, omettre `category_id` retire la catégorie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Produit mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ProductNotFound"
+        "409":
+          description: Référence déjà utilisée par un autre produit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: reference already exists
+        "422":
+          $ref: "#/components/responses/InvalidProduct"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Produits]
+      operationId: deleteProduct
+      summary: Supprimer un produit
+      responses:
+        "204":
+          description: Produit supprimé
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ProductNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /products/{id}/stock:
+    parameters:
+      - $ref: "#/components/parameters/ProductId"
+    post:
+      tags: [Produits]
+      operationId: adjustProductStock
+      summary: Ajouter ou retirer du stock
+      description: |
+        Ajoute `delta` au stock (négatif pour retirer), en une seule opération
+        atomique : deux retraits simultanés ne peuvent pas faire passer le
+        stock sous zéro.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockAdjustment"
+            example:
+              delta: -2
+      responses:
+        "200":
+          description: Nouveau niveau de stock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockLevel"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ProductNotFound"
+        "409":
+          description: Stock insuffisant pour ce retrait
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: insufficient stock
+        "422":
+          description: "`delta` absent, égal à 0 ou hors de l'intervalle d'un entier 32 bits"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: delta is required and must not be 0
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /categories:
+    get:
+      tags: [Catégories]
+      operationId: listCategories
+      summary: Lister les catégories
+      description: Toutes les catégories, triées par nom.
+      responses:
+        "200":
+          description: Les catégories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Catégories]
+      operationId: createCategory
+      summary: Créer une catégorie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+            example:
+              name: Meubles
+      responses:
+        "201":
+          description: Catégorie créée
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Nom de catégorie déjà utilisé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: category already exists
+        "422":
+          description: Nom vide
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: name is required
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /categories/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Identifiant de la catégorie
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+    delete:
+      tags: [Catégories]
+      operationId: deleteCategory
+      summary: Supprimer une catégorie
+      description: Les produits de la catégorie sont conservés et n'ont plus de catégorie.
+      responses:
+        "204":
+          description: Catégorie supprimée
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Catégorie introuvable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: category not found
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Une des clés définies dans la variable `API_KEYS` du serveur.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "La même clé, envoyée en `Authorization: Bearer <clé>`."
+
+  parameters:
+    ProductId:
+      name: id
+      in: path
+      required: true
+      description: Identifiant du produit
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+  schemas:
+    Product:
+      type: object
+      required: [id, reference, name, description, price_cents, category_id, stock, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        reference:
+          type: string
+          description: Référence métier, unique dans le catalogue
+          example: C1
+        name:
+          type: string
+          example: Chaise
+        description:
+          type: string
+          example: En bois
+        price_cents:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Prix en centimes
+          example: 4999
+        category_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Catégorie du produit, `null` s'il n'en a pas
+          example: 1
+        stock:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Quantité disponible
+          example: 5
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductInput:
+      type: object
+      description: Les champs inconnus sont refusés (400).
+      additionalProperties: false
+      required: [reference, name]
+      properties:
+        reference:
+          type: string
+          minLength: 1
+          description: Obligatoire, unique. Les espaces en début et fin sont retirés.
+        name:
+          type: string
+          minLength: 1
+          description: Obligatoire. Les espaces en début et fin sont retirés.
+        description:
+          type: string
+          default: ""
+        price_cents:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+        category_id:
+          type: integer
+          format: int64
+          nullable: true
+          default: null
+          description: Doit désigner une catégorie existante (sinon 422).
+        stock:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+
+    ProductList:
+      type: object
+      required: [products, limit, offset]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        limit:
+          type: integer
+          description: Limite réellement appliquée
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
+    StockAdjustment:
+      type: object
+      additionalProperties: false
+      required: [delta]
+      properties:
+        delta:
+          type: integer
+          format: int32
+          description: Quantité à ajouter (positive) ou à retirer (négative). Ne peut pas valoir 0.
+          example: -2
+
+    StockLevel:
+      type: object
+      required: [id, stock]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        stock:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 3
+
+    Category:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Meubles
+        created_at:
+          type: string
+          format: date-time
+
+    CategoryInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Obligatoire, unique. Les espaces en début et fin sont retirés.
+
+    CategoryList:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Message lisible décrivant le problème
+
+  responses:
+    BadRequest:
+      description: Requête mal formée (JSON invalide, champ inconnu, identifiant ou paramètre non valide)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: id must be a positive integer
+    Unauthorized:
+      description: Clé d'API absente ou invalide
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          example: Bearer realm="catalogue"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: missing or invalid API key
+    ProductNotFound:
+      description: Produit introuvable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: product not found
+    InvalidProduct:
+      description: Données invalides (champ obligatoire vide, prix ou stock négatif, catégorie inexistante)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: name is required
+    InternalError:
+      description: Erreur interne. Le détail est écrit dans les logs du serveur, pas dans la réponse.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: internal error
